@@ -15,6 +15,7 @@ import json
 import os
 import sys
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -164,6 +165,14 @@ def cmd_inactivity():
 # --- Commande : leaderboard du jour ------------------------------------------
 
 MEDALS = ["🥇", "🥈", "🥉"]
+JOURS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+           "août", "septembre", "octobre", "novembre", "décembre"]
+
+
+def today_fr():
+    d = datetime.now(ZoneInfo("Europe/Paris"))
+    return f"{JOURS_FR[d.weekday()]} {d.day} {MOIS_FR[d.month - 1]} {d.year}"
 
 
 def leaderboard_targets():
@@ -243,7 +252,7 @@ def report_leaderboard(clan_id, name, webhook, snapshot_all):
         desc = "\n\n".join(lines)
 
     post_embed({
-        "title": f"🏆 {name} — Top 3 du jour",
+        "title": f"🏆 {name} — Top 3 · {today_fr()}",
         "description": desc,
         "color": 0xF1C40F,
         "footer": {"text": f"{name} • Clan Stats • par dégâts totaux · min {MIN_BATTLES} batailles"},
