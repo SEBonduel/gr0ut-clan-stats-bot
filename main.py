@@ -52,11 +52,11 @@ def api_get(path, **params):
     return payload["data"]
 
 
-def fetch_members():
-    """[{account_id, name}] des membres du clan."""
-    data = api_get("wgn/clans/info", clan_id=CLAN_ID,
+def fetch_members(clan_id=CLAN_ID):
+    """[{account_id, name}] des membres d'un clan."""
+    data = api_get("wgn/clans/info", clan_id=clan_id,
                    fields="members.account_id,members.account_name", game="wot")
-    members = (data.get(str(CLAN_ID)) or {}).get("members") or []
+    members = (data.get(str(clan_id)) or {}).get("members") or []
     return [{"account_id": m["account_id"], "name": m["account_name"]}
             for m in members]
 
@@ -106,10 +106,21 @@ def save_snapshot(snap):
 
 # --- Commande : inactivité ---------------------------------------------------
 
-def cmd_inactivity():
+def inactivity_targets():
+    """Liste des clans à surveiller : [{clan_id, name, webhook}].
+
+    Défini par le secret JSON INACTIVITY_TARGETS, sinon le clan primaire seul.
+    """
+    raw = os.environ.get("INACTIVITY_TARGETS", "").strip()
+    if raw:
+        return json.loads(raw)
+    return [{"clan_id": CLAN_ID, "name": "GR0UT",
+             "webhook": INACTIVITY_WEBHOOK_URL}]
+
+
+def report_inactivity(clan_id, clan_name, webhook):
     now = datetime.now(timezone.utc).timestamp()
-    cutoff = INACTIVITY_DAYS * 86400
-    members = fetch_members()
+    members = fetch_members(clan_id)
     accounts = fetch_accounts([m["account_id"] for m in members])
 
     inactive = []
@@ -136,12 +147,18 @@ def cmd_inactivity():
         desc = "\n".join(lines)
 
     post_embed({
-        "title": f"📉 Membres inactifs (> {INACTIVITY_DAYS} jours) — {len(inactive)}",
+        "title": f"📉 {clan_name} — inactifs (> {INACTIVITY_DAYS} jours) : {len(inactive)}",
         "description": desc[:4000],
         "color": 0xE67E22,
-        "footer": {"text": "GR0UT • Clan Stats"},
-    }, INACTIVITY_WEBHOOK_URL)
-    print(f"inactivity: {len(inactive)} membre(s) signalé(s).")
+        "footer": {"text": f"{clan_name} • Clan Stats"},
+    }, webhook)
+    print(f"inactivity[{clan_name}]: {len(inactive)} membre(s) signalé(s).")
+
+
+def cmd_inactivity():
+    for t in inactivity_targets():
+        report_inactivity(t["clan_id"], t.get("name", t["clan_id"]),
+                          t.get("webhook") or INACTIVITY_WEBHOOK_URL)
 
 
 # --- Commande : leaderboard du jour ------------------------------------------

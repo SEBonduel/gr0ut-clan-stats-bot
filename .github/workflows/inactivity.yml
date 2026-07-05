@@ -18,7 +18,8 @@ jobs:
         env:
           WG_APP_ID: ${{ secrets.WG_APP_ID }}
           WG_CLAN_ID: ${{ secrets.WG_CLAN_ID }}
-          # webhook dédié si défini, sinon retombe sur STATS_WEBHOOK_URL
+          # config multi-clans (JSON) ; sinon retombe sur le clan primaire
+          INACTIVITY_TARGETS: ${{ secrets.INACTIVITY_TARGETS }}
           INACTIVITY_WEBHOOK_URL: ${{ secrets.INACTIVITY_WEBHOOK_URL }}
           STATS_WEBHOOK_URL: ${{ secrets.STATS_WEBHOOK_URL }}
           INACTIVITY_DAYS: "28"
