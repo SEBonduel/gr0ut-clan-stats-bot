@@ -28,7 +28,12 @@ GitHub Actions :
    |--------|--------|
    | `WG_APP_ID` | `00eed50e0468215e87ec936f17c52d8f` |
    | `WG_CLAN_ID` | `500165786` (GR0UT) |
-   | `STATS_WEBHOOK_URL` | l'URL du webhook Discord |
+   | `STATS_WEBHOOK_URL` | webhook par défaut (leaderboard) |
+   | `INACTIVITY_WEBHOOK_URL` | *(optionnel)* webhook d'un salon séparé pour l'inactivité |
+   | `LEADERBOARD_WEBHOOK_URL` | *(optionnel)* webhook dédié au leaderboard |
+
+   Si tu ne définis qu'un `STATS_WEBHOOK_URL`, les deux rapports vont dans le même
+   salon. Pour les séparer, ajoute `INACTIVITY_WEBHOOK_URL` (et/ou `LEADERBOARD_WEBHOOK_URL`).
 
 4. Les crons tournent tout seuls. Test manuel : onglet **Actions** → *Run workflow*.
 

@@ -18,6 +18,8 @@ jobs:
         env:
           WG_APP_ID: ${{ secrets.WG_APP_ID }}
           WG_CLAN_ID: ${{ secrets.WG_CLAN_ID }}
+          # webhook dédié si défini, sinon retombe sur STATS_WEBHOOK_URL
+          INACTIVITY_WEBHOOK_URL: ${{ secrets.INACTIVITY_WEBHOOK_URL }}
           STATS_WEBHOOK_URL: ${{ secrets.STATS_WEBHOOK_URL }}
           INACTIVITY_DAYS: "28"
         run: python main.py inactivity

@@ -20,7 +20,14 @@ import requests
 
 APP_ID = os.environ.get("WG_APP_ID", "").strip()
 CLAN_ID = int(os.environ.get("WG_CLAN_ID", "500165786"))
-WEBHOOK_URL = os.environ.get("STATS_WEBHOOK_URL", "").strip()
+# Webhook par défaut, + webhooks dédiés optionnels (sinon on retombe sur le défaut).
+STATS_WEBHOOK_URL = os.environ.get("STATS_WEBHOOK_URL", "").strip()
+LEADERBOARD_WEBHOOK_URL = (
+    os.environ.get("LEADERBOARD_WEBHOOK_URL", "").strip() or STATS_WEBHOOK_URL
+)
+INACTIVITY_WEBHOOK_URL = (
+    os.environ.get("INACTIVITY_WEBHOOK_URL", "").strip() or STATS_WEBHOOK_URL
+)
 API_BASE = os.environ.get("WG_API_BASE", "https://api.worldoftanks.eu")
 
 INACTIVITY_DAYS = int(os.environ.get("INACTIVITY_DAYS", "28"))
@@ -72,13 +79,13 @@ def fetch_accounts(ids):
 
 # --- Discord -----------------------------------------------------------------
 
-def post_embed(embed):
+def post_embed(embed, webhook):
     body = {"embeds": [embed]}
-    if DRY_RUN or not WEBHOOK_URL:
+    if DRY_RUN or not webhook:
         print("[DRY-RUN] Discord embed:")
         print(json.dumps(body, ensure_ascii=False, indent=2))
         return
-    r = SESSION.post(WEBHOOK_URL, json=body, timeout=20)
+    r = SESSION.post(webhook, json=body, timeout=20)
     r.raise_for_status()
 
 
@@ -133,7 +140,7 @@ def cmd_inactivity():
         "description": desc[:4000],
         "color": 0xE67E22,
         "footer": {"text": "GR0UT • Clan Stats"},
-    })
+    }, INACTIVITY_WEBHOOK_URL)
     print(f"inactivity: {len(inactive)} membre(s) signalé(s).")
 
 
@@ -203,7 +210,7 @@ def cmd_leaderboard():
         "description": desc,
         "color": 0xF1C40F,
         "footer": {"text": f"GR0UT • Clan Stats • classé par dégâts totaux · min {MIN_BATTLES} batailles"},
-    })
+    }, LEADERBOARD_WEBHOOK_URL)
     print(f"leaderboard: {len(top)} joueur(s) au podium sur {len(rows)} actifs.")
 
 
