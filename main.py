@@ -14,7 +14,7 @@ que le workflow GitHub Actions committe d'un run à l'autre.
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import requests
@@ -171,7 +171,9 @@ MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
 
 
 def today_fr():
-    d = datetime.now(ZoneInfo("Europe/Paris"))
+    # Date de la SOIRÉE jouée : -6h pour qu'un run après minuit (ou en soirée)
+    # retombe toujours sur le bon jour de CW.
+    d = datetime.now(ZoneInfo("Europe/Paris")) - timedelta(hours=6)
     return f"{JOURS_FR[d.weekday()]} {d.day} {MOIS_FR[d.month - 1]} {d.year}"
 
 
