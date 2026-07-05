@@ -1,0 +1,23 @@
+name: Radar d'inactivité
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"   # tous les lundis 08h UTC (10h Paris)
+  workflow_dispatch: {}
+
+jobs:
+  inactivity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Post inactivity report
+        env:
+          WG_APP_ID: ${{ secrets.WG_APP_ID }}
+          WG_CLAN_ID: ${{ secrets.WG_CLAN_ID }}
+          STATS_WEBHOOK_URL: ${{ secrets.STATS_WEBHOOK_URL }}
+          INACTIVITY_DAYS: "28"
+        run: python main.py inactivity
