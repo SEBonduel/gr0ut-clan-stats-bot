@@ -166,11 +166,28 @@ def cmd_inactivity():
 MEDALS = ["🥇", "🥈", "🥉"]
 
 
-def cmd_leaderboard():
-    members = {m["account_id"]: m["name"] for m in fetch_members()}
-    accounts = fetch_accounts(list(members))
+def leaderboard_targets():
+    """Clans à classer : [{clan_id, name, webhook}] via LEADERBOARD_TARGETS."""
+    raw = os.environ.get("LEADERBOARD_TARGETS", "").strip()
+    if raw:
+        return json.loads(raw)
+    return [{"clan_id": CLAN_ID, "name": "GR0UT",
+             "webhook": LEADERBOARD_WEBHOOK_URL}]
 
-    # Snapshot courant des stats cumulées.
+
+def load_snapshot_all():
+    """Snapshots par clan {clan_id: {taken_at, stats}} (migre l'ancien format)."""
+    data = load_snapshot()
+    if not data:
+        return {}
+    if "stats" in data and "taken_at" in data:  # ancien format mono-clan
+        return {str(CLAN_ID): data}
+    return data
+
+
+def _current_stats(clan_id):
+    members = {m["account_id"]: m["name"] for m in fetch_members(clan_id)}
+    accounts = fetch_accounts(list(members))
     current = {}
     for aid, info in accounts.items():
         st = (info.get("statistics") or {}).get("all") or {}
@@ -179,19 +196,23 @@ def cmd_leaderboard():
                 "battles": st["battles"], "wins": st["wins"],
                 "damage_dealt": st["damage_dealt"], "xp": st["xp"],
             }
+    return members, current
 
-    prev = load_snapshot()
-    save_snapshot({"taken_at": datetime.now(timezone.utc).isoformat(),
-                   "stats": current})
 
-    if not prev or not prev.get("stats"):
-        print("leaderboard: snapshot initial enregistré, classement dès le prochain run.")
+def report_leaderboard(clan_id, name, webhook, snapshot_all):
+    members, current = _current_stats(clan_id)
+    key = str(clan_id)
+    prev = (snapshot_all.get(key) or {}).get("stats")
+    snapshot_all[key] = {"taken_at": datetime.now(timezone.utc).isoformat(),
+                         "stats": current}
+
+    if not prev:
+        print(f"leaderboard[{name}]: snapshot initial, classement au prochain run.")
         return
 
-    # Deltas sur la période écoulée depuis le dernier snapshot.
     rows = []
     for aid, cur in current.items():
-        old = prev["stats"].get(aid)
+        old = prev.get(aid)
         if not old:
             continue
         db = cur["battles"] - old["battles"]
@@ -208,7 +229,6 @@ def cmd_leaderboard():
 
     rows.sort(key=lambda r: r["total_dmg"], reverse=True)
     top = rows[:3]
-
     if not top:
         desc = (f"Personne n'a joué au moins {MIN_BATTLES} batailles "
                 "sur la période. 😴")
@@ -223,12 +243,20 @@ def cmd_leaderboard():
         desc = "\n\n".join(lines)
 
     post_embed({
-        "title": "🏆 Top 3 du jour — GR0UT",
+        "title": f"🏆 {name} — Top 3 du jour",
         "description": desc,
         "color": 0xF1C40F,
-        "footer": {"text": f"GR0UT • Clan Stats • classé par dégâts totaux · min {MIN_BATTLES} batailles"},
-    }, LEADERBOARD_WEBHOOK_URL)
-    print(f"leaderboard: {len(top)} joueur(s) au podium sur {len(rows)} actifs.")
+        "footer": {"text": f"{name} • Clan Stats • par dégâts totaux · min {MIN_BATTLES} batailles"},
+    }, webhook)
+    print(f"leaderboard[{name}]: {len(top)} au podium / {len(rows)} actifs.")
+
+
+def cmd_leaderboard():
+    snapshot_all = load_snapshot_all()
+    for t in leaderboard_targets():
+        report_leaderboard(t["clan_id"], t.get("name", t["clan_id"]),
+                          t.get("webhook") or LEADERBOARD_WEBHOOK_URL, snapshot_all)
+    save_snapshot(snapshot_all)
 
 
 # --- Entrée ------------------------------------------------------------------

@@ -25,6 +25,8 @@ jobs:
         env:
           WG_APP_ID: ${{ secrets.WG_APP_ID }}
           WG_CLAN_ID: ${{ secrets.WG_CLAN_ID }}
+          # multi-clans (JSON) ; sinon retombe sur STATS_WEBHOOK_URL
+          LEADERBOARD_TARGETS: ${{ secrets.LEADERBOARD_TARGETS }}
           STATS_WEBHOOK_URL: ${{ secrets.STATS_WEBHOOK_URL }}
         run: python main.py leaderboard
       - name: Persist daily snapshot
