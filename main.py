@@ -34,6 +34,7 @@ API_BASE = os.environ.get("WG_API_BASE", "https://api.worldoftanks.eu")
 INACTIVITY_DAYS = int(os.environ.get("INACTIVITY_DAYS", "28"))
 MIN_BATTLES = int(os.environ.get("MIN_BATTLES", "5"))  # seuil pour le leaderboard
 SNAPSHOT_FILE = os.environ.get("SNAPSHOT_FILE", "snapshot.json")
+WN8_EXP_FILE = os.environ.get("WN8_EXP_FILE", "wn8exp.json")  # valeurs attendues (XVM)
 DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
 
 SESSION = requests.Session()
@@ -76,6 +77,103 @@ def fetch_accounts(ids):
         )
         out.update({int(k): v for k, v in data.items() if v})
     return out
+
+
+def fetch_last_battle_times(ids):
+    """{account_id: last_battle_time} — pour ne re-fetcher que les joueurs actifs."""
+    out = {}
+    for i in range(0, len(ids), 100):
+        chunk = ids[i:i + 100]
+        data = api_get("wot/account/info",
+                       account_id=",".join(map(str, chunk)),
+                       fields="last_battle_time")
+        out.update({int(k): (v or {}).get("last_battle_time")
+                    for k, v in data.items() if v})
+    return out
+
+
+def fetch_tank_stats(account_id):
+    """Stats cumulées par char d'un compte : {tank_id: [battles, wins, dmg, frags, spot, def]}."""
+    data = api_get("wot/tanks/stats", account_id=account_id,
+                   fields=("tank_id,all.battles,all.wins,all.damage_dealt,"
+                           "all.frags,all.spotted,all.dropped_capture_points"))
+    tanks = data.get(str(account_id)) or []
+    out = {}
+    for t in tanks:
+        a = t.get("all") or {}
+        if not a.get("battles"):
+            continue
+        out[str(t["tank_id"])] = [
+            a["battles"], a.get("wins", 0), a.get("damage_dealt", 0),
+            a.get("frags", 0), a.get("spotted", 0),
+            a.get("dropped_capture_points", 0),
+        ]
+    return out
+
+
+def fetch_tank_tiers(tank_ids):
+    """{tank_id: tier} depuis l'encyclopédie, pour le tier moyen de session."""
+    out = {}
+    ids = list(tank_ids)
+    for i in range(0, len(ids), 100):
+        chunk = ids[i:i + 100]
+        data = api_get("wot/encyclopedia/vehicles",
+                       tank_id=",".join(map(str, chunk)), fields="tier")
+        for k, v in (data or {}).items():
+            if v and v.get("tier"):
+                out[int(k)] = v["tier"]
+    return out
+
+
+# --- WN8 ---------------------------------------------------------------------
+
+def load_expected():
+    """{tank_id: (expDamage, expFrag, expSpot, expDef, expWinRate)} depuis wn8exp.json."""
+    try:
+        with open(WN8_EXP_FILE, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    return {int(t["IDNum"]): (t["expDamage"], t["expFrag"], t["expSpot"],
+                              t["expDef"], t["expWinRate"])
+            for t in raw.get("data", [])}
+
+
+EXPECTED = load_expected()
+
+
+def session_wn8(sess):
+    """WN8 de session (formule officielle) sur des deltas par char, ou None si incalculable.
+
+    sess : {tank_id_str: {battles, wins, damage, frags, spot, defp}}.
+    Les chars absents de la table de valeurs attendues sont ignorés du calcul.
+    """
+    tb = td = tf = ts = tdef = tw = 0
+    ed = ef = es = edef = ew = 0.0
+    for tid, s in sess.items():
+        exp = EXPECTED.get(int(tid))
+        if not exp:
+            continue
+        b = s["battles"]
+        tb += b
+        td += s["damage"]; tf += s["frags"]; ts += s["spot"]
+        tdef += s["defp"]; tw += s["wins"]
+        ed += exp[0] * b; ef += exp[1] * b; es += exp[2] * b
+        edef += exp[3] * b; ew += exp[4] * b
+    if tb == 0 or ed <= 0:
+        return None
+    r_dmg = td / ed
+    r_frag = tf / ef if ef else 0
+    r_spot = ts / es if es else 0
+    r_def = tdef / edef if edef else 0
+    r_win = (100 * tw) / ew if ew else 0
+    c_win = max(0, (r_win - 0.71) / 0.29)
+    c_dmg = max(0, (r_dmg - 0.22) / 0.78)
+    c_frag = max(0, min(c_dmg + 0.2, (r_frag - 0.12) / 0.88))
+    c_spot = max(0, min(c_dmg + 0.1, (r_spot - 0.38) / 0.62))
+    c_def = max(0, min(c_dmg + 0.1, (r_def - 0.10) / 0.90))
+    return (980 * c_dmg + 210 * c_dmg * c_frag + 155 * c_frag * c_spot
+            + 75 * c_def * c_frag + 145 * min(1.8, c_win))
 
 
 # --- Discord -----------------------------------------------------------------
@@ -187,58 +285,98 @@ def leaderboard_targets():
 
 
 def load_snapshot_all():
-    """Snapshots par clan {clan_id: {taken_at, stats}} (migre l'ancien format)."""
+    """Snapshots par clan {clan_id: {taken_at, players}} (migre les anciens formats)."""
     data = load_snapshot()
     if not data:
         return {}
-    if "stats" in data and "taken_at" in data:  # ancien format mono-clan
+    if "stats" in data and "taken_at" in data:  # très ancien format mono-clan
         return {str(CLAN_ID): data}
     return data
 
 
-def _current_stats(clan_id):
-    members = {m["account_id"]: m["name"] for m in fetch_members(clan_id)}
-    accounts = fetch_accounts(list(members))
-    current = {}
-    for aid, info in accounts.items():
-        st = (info.get("statistics") or {}).get("all") or {}
-        if st.get("battles") is not None:
-            current[str(aid)] = {
-                "battles": st["battles"], "wins": st["wins"],
-                "damage_dealt": st["damage_dealt"], "xp": st["xp"],
-            }
-    return members, current
+def _delta_session(cur, base):
+    """Deltas de session par char entre deux relevés cumulés (par char)."""
+    sess = {}
+    for tid, c in cur.items():
+        b0 = base.get(tid) if base else None
+        db = c[0] - (b0[0] if b0 else 0)
+        if db <= 0:
+            continue
+        sess[tid] = {
+            "battles": db,
+            "wins": c[1] - (b0[1] if b0 else 0),
+            "damage": c[2] - (b0[2] if b0 else 0),
+            "frags": c[3] - (b0[3] if b0 else 0),
+            "spot": c[4] - (b0[4] if b0 else 0),
+            "defp": c[5] - (b0[5] if b0 else 0),
+        }
+    return sess
 
 
 def report_leaderboard(clan_id, name, webhook, snapshot_all):
-    members, current = _current_stats(clan_id)
     key = str(clan_id)
-    prev = (snapshot_all.get(key) or {}).get("stats")
-    snapshot_all[key] = {"taken_at": datetime.now(timezone.utc).isoformat(),
-                         "stats": current}
+    prev = snapshot_all.get(key) or {}
+    prev_players = prev.get("players")  # None => pas de baseline v2 (re-seed)
+    prev_ts = 0.0
+    if prev.get("taken_at"):
+        try:
+            prev_ts = datetime.fromisoformat(prev["taken_at"]).timestamp()
+        except ValueError:
+            prev_ts = 0.0
 
-    if not prev:
-        print(f"leaderboard[{name}]: snapshot initial, classement au prochain run.")
+    members = {m["account_id"]: m["name"] for m in fetch_members(clan_id)}
+    # Sans baseline on doit tout re-fetcher ; sinon on cible les joueurs actifs.
+    last_bt = fetch_last_battle_times(list(members)) if prev_players is not None else {}
+
+    new_players = {}
+    session = {}  # account_id -> deltas de session par char
+    for aid in members:
+        said = str(aid)
+        if prev_players is None:                      # premier run : on sème la base
+            new_players[said] = fetch_tank_stats(aid)
+            continue
+        if (last_bt.get(aid) or 0) <= prev_ts:        # aucune bataille depuis le snapshot
+            if said in prev_players:
+                new_players[said] = prev_players[said]  # baseline inchangée, pas d'appel API
+            continue
+        cur = fetch_tank_stats(aid)
+        new_players[said] = cur
+        sess = _delta_session(cur, prev_players.get(said))
+        if sess:
+            session[aid] = sess
+
+    snapshot_all[key] = {"taken_at": datetime.now(timezone.utc).isoformat(),
+                         "players": new_players}
+
+    if prev_players is None:
+        print(f"leaderboard[{name}]: snapshot initial ({len(new_players)} joueurs), "
+              "classement au prochain run.")
         return
 
+    tiers = fetch_tank_tiers({int(tid) for s in session.values() for tid in s})
+
     rows = []
-    for aid, cur in current.items():
-        old = prev.get(aid)
-        if not old:
+    for aid, sess in session.items():
+        battles = sum(s["battles"] for s in sess.values())
+        if battles < MIN_BATTLES:
             continue
-        db = cur["battles"] - old["battles"]
-        if db < MIN_BATTLES:
+        wn8 = session_wn8(sess)
+        if wn8 is None:
             continue
-        dw = cur["wins"] - old["wins"]
-        dd = cur["damage_dealt"] - old["damage_dealt"]
-        dx = cur["xp"] - old["xp"]
+        dmg = sum(s["damage"] for s in sess.values())
+        spot = sum(s["spot"] for s in sess.values())
+        wins = sum(s["wins"] for s in sess.values())
+        tier_b = sum(s["battles"] for tid, s in sess.items() if int(tid) in tiers)
+        tier_w = sum(tiers[int(tid)] * s["battles"]
+                     for tid, s in sess.items() if int(tid) in tiers)
         rows.append({
-            "name": members.get(int(aid), aid),
-            "battles": db, "winrate": 100 * dw / db,
-            "avg_dmg": dd / db, "total_xp": dx, "total_dmg": dd,
+            "name": members.get(aid, aid), "wn8": wn8, "battles": battles,
+            "avg_dmg": dmg / battles, "avg_spot": spot / battles,
+            "winrate": 100 * wins / battles,
+            "avg_tier": (tier_w / tier_b) if tier_b else 0,
         })
 
-    rows.sort(key=lambda r: r["total_dmg"], reverse=True)
+    rows.sort(key=lambda r: r["wn8"], reverse=True)
     top = rows[:3]
     if not top:
         desc = (f"Personne n'a joué au moins {MIN_BATTLES} batailles "
@@ -246,18 +384,20 @@ def report_leaderboard(clan_id, name, webhook, snapshot_all):
     else:
         lines = []
         for i, r in enumerate(top):
-            lines.append(
-                f"{MEDALS[i]} **{r['name']}**\n"
-                f"　{r['battles']} batailles · {r['winrate']:.0f}% victoires · "
-                f"{r['avg_dmg']:.0f} dégâts/bataille · {r['total_xp']:,} XP".replace(",", " ")
+            line = (
+                f"{MEDALS[i]} **{r['name']}** — WN8 **{r['wn8']:,.0f}**\n"
+                f"　{r['battles']} batailles · tier {r['avg_tier']:.1f} · "
+                f"{r['avg_dmg']:,.0f} dmg/bat · {r['avg_spot']:.1f} spot/bat · "
+                f"{r['winrate']:.0f}% WR"
             )
+            lines.append(line.replace(",", " "))
         desc = "\n\n".join(lines)
 
     post_embed({
         "title": f"🏆 {name} — Top 3 · {today_fr()}",
         "description": desc,
         "color": 0xF1C40F,
-        "footer": {"text": f"{name} • Clan Stats • par dégâts totaux · min {MIN_BATTLES} batailles"},
+        "footer": {"text": f"{name} • Clan Stats • WN8 de session · min {MIN_BATTLES} batailles"},
     }, webhook)
     print(f"leaderboard[{name}]: {len(top)} au podium / {len(rows)} actifs.")
 

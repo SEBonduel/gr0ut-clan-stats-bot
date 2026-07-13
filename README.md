@@ -6,15 +6,19 @@ GitHub Actions :
 - 📉 **Radar d'inactivité** — chaque lundi, liste les membres sans bataille depuis
   plus de 28 jours (configurable).
 - 🏆 **Leaderboard du jour** — chaque soir, le **top 3** des joueurs des dernières
-  ~24h (batailles, % de victoires, dégâts moyens, XP), classé par dégâts totaux.
+  ~24h, classé par **WN8 de session** (perf réelle par bataille, pas par volume).
+  Chaque joueur affiche : WN8, tier moyen, dégâts moyens, spot moyen et % de victoires.
 
 ## Comment ça marche
 
 - `main.py inactivity` : récupère les membres (`wgn/clans/info`) + leur
   `last_battle_time` (`account/info`) et signale les inactifs.
-- `main.py leaderboard` : compare les stats cumulées à un **snapshot quotidien**
-  (`snapshot.json`, committé automatiquement d'un run à l'autre) pour calculer les
-  performances du jour.
+- `main.py leaderboard` : compare les stats **par char** (`wot/tanks/stats`) à un
+  **snapshot quotidien** (`snapshot.json`, committé automatiquement d'un run à l'autre)
+  pour calculer la **WN8 de session** de chaque joueur. La WN8 utilise la table de
+  valeurs attendues officielle embarquée dans `wn8exp.json` (source XVM) et le tier
+  moyen via `wot/encyclopedia/vehicles`. Pour rester léger, seuls les joueurs ayant
+  joué depuis le dernier snapshot sont re-interrogés char par char.
 - Publication via **webhook Discord**. Aucun serveur à héberger.
 
 ## Mise en place
@@ -43,7 +47,12 @@ GitHub Actions :
 |----------|--------|------|
 | `INACTIVITY_DAYS` | `28` | Seuil d'inactivité (jours) |
 | `MIN_BATTLES` | `5` | Minimum de batailles pour figurer au leaderboard |
+| `WN8_EXP_FILE` | `wn8exp.json` | Table des valeurs attendues WN8 (XVM) |
 | `DRY_RUN` | — | `1` = n'envoie rien, affiche dans la console |
+
+> **`wn8exp.json`** est la table officielle des valeurs attendues (source XVM). Pour
+> la mettre à jour de temps en temps :
+> `curl -sSL -o wn8exp.json https://static.modxvm.com/wn8-data-exp/json/wn8exp.json`
 
 ## Test en local
 
