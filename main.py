@@ -410,9 +410,38 @@ def cmd_leaderboard():
     save_snapshot(snapshot_all)
 
 
+# --- Commande : annonce (mise à jour du calcul des stats) ---------------------
+
+def cmd_announce():
+    """Poste une annonce ponctuelle expliquant le nouveau calcul du leaderboard."""
+    desc = (
+        "Le classement du soir ne récompense plus le **volume** de parties mais la "
+        "**régularité et la performance réelle**.\n\n"
+        "**Nouveau tri : la WN8 de session** (perf du jour, formule officielle).\n"
+        "Chaque joueur affiche désormais :\n"
+        "• 🎯 **WN8 de la session**\n"
+        "• 🏅 **tier moyen** joué\n"
+        "• 💥 **dégâts moyens** par bataille\n"
+        "• 👁️ **spot moyen** par bataille\n"
+        "• ✅ **% de victoires**\n\n"
+        "Fini le classement au total de dégâts/XP : mieux vaut **5 bonnes parties "
+        "qu'une soirée de farm**. Minimum toujours fixé à "
+        f"**{MIN_BATTLES} batailles** pour apparaître au podium."
+    )
+    embed = {
+        "title": "🔧 Mise à jour du calcul des stats par SEBonduel",
+        "description": desc,
+        "color": 0x3498DB,
+        "footer": {"text": "GR0UT • Clan Stats • WN8 de session"},
+    }
+    post_embed(embed, LEADERBOARD_WEBHOOK_URL)
+    print("announce: annonce postée.")
+
+
 # --- Entrée ------------------------------------------------------------------
 
-COMMANDS = {"inactivity": cmd_inactivity, "leaderboard": cmd_leaderboard}
+COMMANDS = {"inactivity": cmd_inactivity, "leaderboard": cmd_leaderboard,
+            "announce": cmd_announce}
 
 
 def main():

@@ -1,0 +1,22 @@
+name: Annonce mise à jour stats
+
+# Déclenchement manuel uniquement (Actions → Annonce mise à jour stats → Run workflow).
+on:
+  workflow_dispatch: {}
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Post announcement
+        env:
+          WG_APP_ID: ${{ secrets.WG_APP_ID }}
+          WG_CLAN_ID: ${{ secrets.WG_CLAN_ID }}
+          LEADERBOARD_WEBHOOK_URL: ${{ secrets.LEADERBOARD_WEBHOOK_URL }}
+          STATS_WEBHOOK_URL: ${{ secrets.STATS_WEBHOOK_URL }}
+        run: python main.py announce

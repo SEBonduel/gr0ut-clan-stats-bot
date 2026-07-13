@@ -19,6 +19,9 @@ GitHub Actions :
   valeurs attendues officielle embarquée dans `wn8exp.json` (source XVM) et le tier
   moyen via `wot/encyclopedia/vehicles`. Pour rester léger, seuls les joueurs ayant
   joué depuis le dernier snapshot sont re-interrogés char par char.
+- `main.py announce` : poste une **annonce ponctuelle** (« Mise à jour du calcul des
+  stats par SEBonduel ») détaillant le passage au classement WN8. Déclenchable à la
+  main via *Actions → Annonce mise à jour stats → Run workflow*.
 - Publication via **webhook Discord**. Aucun serveur à héberger.
 
 ## Mise en place
