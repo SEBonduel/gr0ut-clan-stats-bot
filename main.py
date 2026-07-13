@@ -33,6 +33,7 @@ API_BASE = os.environ.get("WG_API_BASE", "https://api.worldoftanks.eu")
 
 INACTIVITY_DAYS = int(os.environ.get("INACTIVITY_DAYS", "28"))
 MIN_BATTLES = int(os.environ.get("MIN_BATTLES", "5"))  # seuil pour le leaderboard
+TOP_N = int(os.environ.get("TOP_N", "5"))  # taille du classement (podium)
 SNAPSHOT_FILE = os.environ.get("SNAPSHOT_FILE", "snapshot.json")
 WN8_EXP_FILE = os.environ.get("WN8_EXP_FILE", "wn8exp.json")  # valeurs attendues (XVM)
 DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
@@ -262,7 +263,12 @@ def cmd_inactivity():
 
 # --- Commande : leaderboard du jour ------------------------------------------
 
-MEDALS = ["🥇", "🥈", "🥉"]
+MEDALS = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+
+def rank_marker(i):
+    """Marqueur du rang i (0-indexé) : médailles puis chiffres, fallback '11.'…"""
+    return MEDALS[i] if i < len(MEDALS) else f"{i + 1}."
 JOURS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
            "août", "septembre", "octobre", "novembre", "décembre"]
@@ -377,7 +383,7 @@ def report_leaderboard(clan_id, name, webhook, snapshot_all):
         })
 
     rows.sort(key=lambda r: r["wn8"], reverse=True)
-    top = rows[:3]
+    top = rows[:TOP_N]
     if not top:
         desc = (f"Personne n'a joué au moins {MIN_BATTLES} batailles "
                 "sur la période. 😴")
@@ -385,7 +391,7 @@ def report_leaderboard(clan_id, name, webhook, snapshot_all):
         lines = []
         for i, r in enumerate(top):
             line = (
-                f"{MEDALS[i]} **{r['name']}** — WN8 **{r['wn8']:,.0f}**\n"
+                f"{rank_marker(i)} **{r['name']}** — WN8 **{r['wn8']:,.0f}**\n"
                 f"　{r['battles']} batailles · tier {r['avg_tier']:.1f} · "
                 f"{r['avg_dmg']:,.0f} dmg/bat · {r['avg_spot']:.1f} spot/bat · "
                 f"{r['winrate']:.0f}% WR"
@@ -394,7 +400,7 @@ def report_leaderboard(clan_id, name, webhook, snapshot_all):
         desc = "\n\n".join(lines)
 
     post_embed({
-        "title": f"🏆 {name} — Top 3 · {today_fr()}",
+        "title": f"🏆 {name} — Top {TOP_N} · {today_fr()}",
         "description": desc,
         "color": 0xF1C40F,
         "footer": {"text": f"{name} • Clan Stats • WN8 de session · min {MIN_BATTLES} batailles"},

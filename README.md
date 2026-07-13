@@ -5,7 +5,7 @@ GitHub Actions :
 
 - 📉 **Radar d'inactivité** — chaque lundi, liste les membres sans bataille depuis
   plus de 28 jours (configurable).
-- 🏆 **Leaderboard du jour** — chaque soir, le **top 3** des joueurs des dernières
+- 🏆 **Leaderboard du jour** — chaque soir, le **top 5** des joueurs des dernières
   ~24h, classé par **WN8 de session** (perf réelle par bataille, pas par volume).
   Chaque joueur affiche : WN8, tier moyen, dégâts moyens, spot moyen et % de victoires.
 
@@ -50,6 +50,7 @@ GitHub Actions :
 |----------|--------|------|
 | `INACTIVITY_DAYS` | `28` | Seuil d'inactivité (jours) |
 | `MIN_BATTLES` | `5` | Minimum de batailles pour figurer au leaderboard |
+| `TOP_N` | `5` | Nombre de joueurs affichés au classement |
 | `WN8_EXP_FILE` | `wn8exp.json` | Table des valeurs attendues WN8 (XVM) |
 | `DRY_RUN` | — | `1` = n'envoie rien, affiche dans la console |
 
