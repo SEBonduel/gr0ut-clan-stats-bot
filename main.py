@@ -14,6 +14,7 @@ que le workflow GitHub Actions committe d'un run à l'autre.
 import json
 import os
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -40,19 +41,31 @@ DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "gr0ut-clan-stats/1.0"})
+# Erreurs WG transitoires : on retente au lieu de faire planter tout le run.
+TRANSIENT = {"SOURCE_NOT_AVAILABLE", "REQUEST_LIMIT_EXCEEDED"}
 
 
 # --- API ---------------------------------------------------------------------
 
-def api_get(path, **params):
+def api_get(path, _retries=3, **params):
     params["application_id"] = APP_ID
     url = f"{API_BASE}/{path.strip('/')}/"
-    r = SESSION.get(url, params=params, timeout=30)
-    r.raise_for_status()
-    payload = r.json()
-    if payload.get("status") != "ok":
-        raise RuntimeError(f"API error on {path}: {payload.get('error')}")
-    return payload["data"]
+    last = None
+    for attempt in range(_retries):
+        try:
+            r = SESSION.get(url, params=params, timeout=30)
+            r.raise_for_status()
+            payload = r.json()
+            if payload.get("status") == "ok":
+                return payload["data"]
+            err = payload.get("error") or {}
+            last = RuntimeError(f"API error on {path}: {err}")
+            if err.get("message") not in TRANSIENT:
+                raise last
+        except requests.RequestException as exc:
+            last = exc
+        time.sleep(2 * (attempt + 1))
+    raise last
 
 
 def fetch_members(clan_id=CLAN_ID):
@@ -339,13 +352,22 @@ def report_leaderboard(clan_id, name, webhook, snapshot_all):
     for aid in members:
         said = str(aid)
         if prev_players is None:                      # premier run : on sème la base
-            new_players[said] = fetch_tank_stats(aid)
+            try:
+                new_players[said] = fetch_tank_stats(aid)
+            except Exception as exc:                  # noqa: BLE001 — un joueur ne doit pas tout casser
+                print(f"  warn: seed {aid} échoué ({exc}) ; ré-essai au prochain run.")
             continue
         if (last_bt.get(aid) or 0) <= prev_ts:        # aucune bataille depuis le snapshot
             if said in prev_players:
                 new_players[said] = prev_players[said]  # baseline inchangée, pas d'appel API
             continue
-        cur = fetch_tank_stats(aid)
+        try:
+            cur = fetch_tank_stats(aid)
+        except Exception as exc:                      # noqa: BLE001
+            print(f"  warn: stats {members.get(aid, aid)} indisponibles ({exc}) ; ignoré ce soir.")
+            if said in prev_players:
+                new_players[said] = prev_players[said]  # on conserve la baseline du joueur
+            continue
         new_players[said] = cur
         sess = _delta_session(cur, prev_players.get(said))
         if sess:
