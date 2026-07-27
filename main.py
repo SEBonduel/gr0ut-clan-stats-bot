@@ -31,10 +31,18 @@ INACTIVITY_WEBHOOK_URL = (
     os.environ.get("INACTIVITY_WEBHOOK_URL", "").strip() or STATS_WEBHOOK_URL
 )
 API_BASE = os.environ.get("WG_API_BASE", "https://api.worldoftanks.eu")
+# Portail clan (API interne, non documentée) : seule source du nb de batailles
+# Bastion/Incursions par membre. Publique (pas d'auth), mais spécifique région.
+PORTAL_BASE = os.environ.get("WG_PORTAL_BASE", "https://eu.wargaming.net").rstrip("/")
 
 INACTIVITY_DAYS = int(os.environ.get("INACTIVITY_DAYS", "28"))
 MIN_BATTLES = int(os.environ.get("MIN_BATTLES", "5"))  # seuil pour le leaderboard
 TOP_N = int(os.environ.get("TOP_N", "5"))  # taille du classement (podium)
+# Radar d'inactivité, 2e section : jeu en équipe (Bastion + Incursions).
+# Sous ce nombre de batailles Bastion/Incursions sur 28 j, le membre est
+# signalé comme ne participant pas au jeu d'équipe (contribution ~nulle aux
+# ressources industrielles, qui ne se gagnent que dans ces modes).
+MIN_BASTION_BATTLES = int(os.environ.get("MIN_BASTION_BATTLES", "10"))
 SNAPSHOT_FILE = os.environ.get("SNAPSHOT_FILE", "snapshot.json")
 WN8_EXP_FILE = os.environ.get("WN8_EXP_FILE", "wn8exp.json")  # valeurs attendues (XVM)
 DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
@@ -104,6 +112,40 @@ def fetch_last_battle_times(ids):
         out.update({int(k): (v or {}).get("last_battle_time")
                     for k, v in data.items() if v})
     return out
+
+
+BASTION_DAYS = 28  # seule fenêtre proposée par le portail (1 / 7 / 28 j)
+BASTION_BATTLE_TYPES = ("sortie", "incursion")  # Escarmouches (Bastion) + Incursions
+
+
+def fetch_bastion_activity(clan_id):
+    """{account_id: nb batailles Bastion+Incursions sur 28 j} via le portail clan.
+
+    Source : endpoint interne `/clans/wot/<id>/api/players/` (public, sans auth,
+    mais exige l'en-tête AJAX). Renvoie None si les stats du clan sont masquées
+    ou si l'endpoint est indisponible — la section est alors simplement omise.
+    """
+    totals = {}
+    for bt in BASTION_BATTLE_TYPES:
+        url = f"{PORTAL_BASE}/clans/wot/{clan_id}/api/players/"
+        try:
+            r = SESSION.get(
+                url,
+                params={"offset": 0, "limit": 500, "order": "-role",
+                        "timeframe": BASTION_DAYS, "battle_type": bt},
+                headers={"X-Requested-With": "XMLHttpRequest"}, timeout=30,
+            )
+            r.raise_for_status()
+            data = r.json()
+        except (requests.RequestException, ValueError) as exc:
+            print(f"  warn: activité Bastion ({bt}) indispo pour {clan_id} ({exc}).")
+            return None
+        if data.get("is_hidden_statistics"):
+            print(f"  info: stats du clan {clan_id} masquées ; section Bastion ignorée.")
+            return None
+        for p in data.get("items", []):
+            totals[p["id"]] = totals.get(p["id"], 0) + (p.get("battles_count") or 0)
+    return totals
 
 
 def fetch_tank_stats(account_id):
@@ -237,19 +279,22 @@ def report_inactivity(clan_id, clan_name, webhook):
     accounts = fetch_accounts([m["account_id"] for m in members])
 
     inactive = []
+    afk_ids = set()  # membres déjà signalés comme réellement inactifs
     for m in members:
         info = accounts.get(m["account_id"])
         lbt = (info or {}).get("last_battle_time")
         if not lbt:  # profil privé ou jamais joué -> on signale à part
             inactive.append((m["name"], None))
+            afk_ids.add(m["account_id"])
             continue
         days = (now - lbt) / 86400
         if days >= INACTIVITY_DAYS:
             inactive.append((m["name"], int(days)))
+            afk_ids.add(m["account_id"])
 
     inactive.sort(key=lambda x: (x[1] is not None, -(x[1] or 0)))
     if not inactive:
-        desc = f"✅ Aucun membre inactif depuis plus de {INACTIVITY_DAYS} jours. GG !"
+        lines = [f"✅ Aucun membre inactif depuis plus de {INACTIVITY_DAYS} jours. GG !"]
     else:
         lines = []
         for name, days in inactive:
@@ -257,15 +302,37 @@ def report_inactivity(clan_id, clan_name, webhook):
                 lines.append(f"• **{name}** — profil privé / jamais joué")
             else:
                 lines.append(f"• **{name}** — {days} jours sans bataille")
-        desc = "\n".join(lines)
+
+    # --- 2e section : peu ou pas de jeu d'équipe (Bastion + Incursions, 28 j) ---
+    # Signalés à part des vrais AFK : ils jouent, mais pas en équipe (donc ~0
+    # ressource industrielle). Les membres déjà comptés comme AFK sont exclus.
+    activity = fetch_bastion_activity(clan_id)
+    low = None
+    if activity is not None:
+        low = sorted(
+            ((m["name"], activity.get(m["account_id"], 0)) for m in members
+             if m["account_id"] not in afk_ids
+             and activity.get(m["account_id"], 0) < MIN_BASTION_BATTLES),
+            key=lambda x: x[1],
+        )
+        lines.append("")  # ligne vide : sépare les vrais AFK du reste
+        lines.append(f"__📦 Moins de {MIN_BASTION_BATTLES} batailles d'équipe "
+                     f"(Bastion + Incursions) sur {BASTION_DAYS} j :__")
+        if not low:
+            lines.append("✅ Tout le monde joue en équipe. 💪")
+        else:
+            for name, n in low:
+                s = "s" if n != 1 else ""
+                lines.append(f"• **{name}** — {n} bataille{s} Bastion/Incursion")
 
     post_embed({
         "title": f"📉 {clan_name} — inactifs (> {INACTIVITY_DAYS} jours) : {len(inactive)}",
-        "description": desc[:4000],
+        "description": "\n".join(lines)[:4000],
         "color": 0xE67E22,
         "footer": {"text": f"{clan_name} • Clan Stats"},
     }, webhook)
-    print(f"inactivity[{clan_name}]: {len(inactive)} membre(s) signalé(s).")
+    print(f"inactivity[{clan_name}]: {len(inactive)} AFK, "
+          f"{'n/a' if low is None else len(low)} sous le seuil Bastion.")
 
 
 def cmd_inactivity():

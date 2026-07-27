@@ -4,7 +4,10 @@ Deux automatisations Discord pour le clan GR0UT (World of Tanks EU), gratuites v
 GitHub Actions :
 
 - 📉 **Radar d'inactivité** — chaque lundi, liste les membres sans bataille depuis
-  plus de 28 jours (configurable).
+  plus de 28 jours (configurable). Une 2ᵉ section, séparée, signale les membres qui
+  **jouent mais pas en équipe** : moins de `MIN_BASTION_BATTLES` batailles
+  **Bastion (Escarmouches) + Incursions** sur 28 jours (≈ contribution nulle en
+  ressources industrielles, qui ne se gagnent que dans ces modes).
 - 🏆 **Leaderboard du jour** — chaque soir, le **top 5** des joueurs des dernières
   ~24h, classé par **WN8 de session** (perf réelle par bataille, pas par volume).
   Chaque joueur affiche : WN8, tier moyen, dégâts moyens, spot moyen et % de victoires.
@@ -12,7 +15,12 @@ GitHub Actions :
 ## Comment ça marche
 
 - `main.py inactivity` : récupère les membres (`wgn/clans/info`) + leur
-  `last_battle_time` (`account/info`) et signale les inactifs.
+  `last_battle_time` (`account/info`) et signale les inactifs. Pour la 2ᵉ section
+  (jeu d'équipe), il lit le **nombre de batailles Bastion + Incursions sur 28 j par
+  membre** via l'API interne du portail clan
+  (`eu.wargaming.net/clans/wot/<id>/api/players/`, publique mais non documentée ;
+  l'API publique WG n'expose pas cette donnée). Si le clan masque ses stats ou si
+  l'endpoint est indisponible, la section est simplement omise.
 - `main.py leaderboard` : compare les stats **par char** (`wot/tanks/stats`) à un
   **snapshot quotidien** (`snapshot.json`, committé automatiquement d'un run à l'autre)
   pour calculer la **WN8 de session** de chaque joueur. La WN8 utilise la table de
@@ -49,6 +57,8 @@ GitHub Actions :
 | Variable | Défaut | Rôle |
 |----------|--------|------|
 | `INACTIVITY_DAYS` | `28` | Seuil d'inactivité (jours) |
+| `MIN_BASTION_BATTLES` | `10` | Sous ce nb de batailles Bastion+Incursions sur 28 j → signalé « ne joue pas en équipe » |
+| `WG_PORTAL_BASE` | `https://eu.wargaming.net` | Base du portail clan (change de région au besoin) |
 | `MIN_BATTLES` | `5` | Minimum de batailles pour figurer au leaderboard |
 | `TOP_N` | `5` | Nombre de joueurs affichés au classement |
 | `WN8_EXP_FILE` | `wn8exp.json` | Table des valeurs attendues WN8 (XVM) |
