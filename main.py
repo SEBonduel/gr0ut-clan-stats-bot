@@ -436,7 +436,15 @@ def report_leaderboard(clan_id, name, webhook, snapshot_all):
                 new_players[said] = prev_players[said]  # on conserve la baseline du joueur
             continue
         new_players[said] = cur
-        sess = _delta_session(cur, prev_players.get(said))
+        base = prev_players.get(said)
+        if base is None:
+            # Nouveau membre : aucune référence -> on sème sa baseline et on
+            # l'exclut du classement ce soir (sinon toute sa carrière compterait
+            # comme une seule session). Il sera classé dès le prochain run.
+            print(f"  info: {members.get(aid, aid)} nouveau (pas de baseline) ; "
+                  "semé, classé au prochain run.")
+            continue
+        sess = _delta_session(cur, base)
         if sess:
             session[aid] = sess
 
