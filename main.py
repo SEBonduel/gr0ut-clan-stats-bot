@@ -47,6 +47,18 @@ SNAPSHOT_FILE = os.environ.get("SNAPSHOT_FILE", "snapshot.json")
 WN8_EXP_FILE = os.environ.get("WN8_EXP_FILE", "wn8exp.json")  # valeurs attendues (XVM)
 DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
 
+# --- Promotion auto recrue -> soldat (GR0UT uniquement) ----------------------
+# Passe les recrues à « soldat » après PROMOTE_AFTER_DAYS jours dans le clan.
+# Utilise l'API interne du portail clan (endpoint change_role), qui exige une
+# SESSION authentifiée d'officier : le cookie complet est fourni via le secret
+# WG_PORTAL_COOKIE (à recoller le jour où il expire ; le bot prévient sur Discord).
+PROMOTE_CLAN_ID = int(os.environ.get("PROMOTE_CLAN_ID", "500165786"))  # GR0UT
+PROMOTE_AFTER_DAYS = int(os.environ.get("PROMOTE_AFTER_DAYS", "30"))
+PROMOTE_WEBHOOK_URL = (
+    os.environ.get("PROMOTE_WEBHOOK_URL", "").strip() or INACTIVITY_WEBHOOK_URL
+)
+WG_PORTAL_COOKIE = os.environ.get("WG_PORTAL_COOKIE", "").strip()
+
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "gr0ut-clan-stats/1.0"})
 # Erreurs WG transitoires : on retente au lieu de faire planter tout le run.
@@ -541,10 +553,151 @@ def cmd_announce():
     print("announce: annonce postée.")
 
 
+# --- Commande : promotion auto recrue -> soldat ------------------------------
+
+def _cookie_value(cookie_str, name):
+    """Extrait la valeur d'un cookie donné depuis l'en-tête Cookie complet."""
+    for part in cookie_str.split(";"):
+        k, _, v = part.strip().partition("=")
+        if k == name:
+            return v
+    return None
+
+
+def fetch_recruits_since(clan_id, days):
+    """[(account_id, name, jours)] des recrues dans le clan depuis >= days jours."""
+    data = api_get("wgn/clans/info", clan_id=clan_id, game="wot",
+                   fields="members.account_id,members.account_name,"
+                          "members.role,members.joined_at")
+    members = (data.get(str(clan_id)) or {}).get("members") or []
+    now = datetime.now(timezone.utc).timestamp()
+    out = []
+    for m in members:
+        if m.get("role") != "recruit":
+            continue
+        j = m.get("joined_at")
+        d = int((now - j) / 86400) if j else 0
+        if j and d >= days:
+            out.append((m["account_id"], m["account_name"], d))
+    out.sort(key=lambda x: -x[2])
+    return out
+
+
+def portal_change_role(clan_id, account_id, role="private"):
+    """Change le grade d'un membre via l'API interne du portail (session officier).
+
+    Renvoie ('ok'|'already'|'expired'|'error', détail). Nécessite WG_PORTAL_COOKIE.
+    """
+    csrf = _cookie_value(WG_PORTAL_COOKIE, "csrftoken")
+    if not csrf:
+        return ("expired", "cookie sans csrftoken")
+    url = f"{PORTAL_BASE}/clans/wot/{clan_id}/api/change_role/"
+    ref = f"{PORTAL_BASE}/clans/wot/{clan_id}/players/"
+    try:
+        r = SESSION.post(
+            url, data={"user_ids": account_id, "role": role},
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRFToken": csrf,
+                "Cookie": WG_PORTAL_COOKIE,
+                "Referer": ref,
+                "Origin": PORTAL_BASE,
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            }, timeout=30, allow_redirects=False,
+        )
+    except requests.RequestException as exc:
+        return ("error", str(exc))
+    # Session morte : le portail redirige vers le login ou renvoie 401/403.
+    if r.status_code in (301, 302, 401, 403):
+        return ("expired", f"HTTP {r.status_code}")
+    if r.status_code == 201:
+        return ("ok", "201")
+    body = (r.text or "")[:200]
+    if "role_already_assigned" in body:
+        return ("already", "409")
+    return ("error", f"HTTP {r.status_code} {body}")
+
+
+def portal_keep_alive(clan_id):
+    """GET léger sur le portail pour garder la session chaude (expiration glissante)."""
+    if not WG_PORTAL_COOKIE:
+        return
+    try:
+        SESSION.get(f"{PORTAL_BASE}/clans/wot/{clan_id}/players/",
+                    headers={"Cookie": WG_PORTAL_COOKIE}, timeout=20)
+    except requests.RequestException:
+        pass
+
+
+def cmd_promote():
+    """Passe les recrues de GR0UT à soldat après PROMOTE_AFTER_DAYS jours."""
+    portal_keep_alive(PROMOTE_CLAN_ID)  # maintient la session vivante à chaque run
+    recruits = fetch_recruits_since(PROMOTE_CLAN_ID, PROMOTE_AFTER_DAYS)
+    if not recruits:
+        print(f"promote: aucune recrue >= {PROMOTE_AFTER_DAYS} j.")
+        return
+    if not WG_PORTAL_COOKIE:
+        # Pas de session configurée : on prévient sur Discord au lieu d'échouer.
+        noms = ", ".join(n for _, n, _ in recruits)
+        post_embed({
+            "title": "⚠️ Promotions en attente (cookie portail manquant)",
+            "description": (f"{len(recruits)} recrue(s) à passer soldat : {noms}\n\n"
+                            "Configure le secret `WG_PORTAL_COOKIE` pour l'automatiser."),
+            "color": 0xE67E22,
+            "footer": {"text": "GR0UT • Promotion auto"},
+        }, PROMOTE_WEBHOOK_URL)
+        print("promote: cookie manquant ; liste postée.")
+        return
+
+    promoted, remaining, expired = [], [], False
+    for i, (aid, name, days) in enumerate(recruits):
+        if DRY_RUN:
+            print(f"[DRY-RUN] promote {name} ({days} j) -> soldat")
+            promoted.append((name, days))
+            continue
+        status, detail = portal_change_role(PROMOTE_CLAN_ID, aid, "private")
+        if status == "ok":
+            promoted.append((name, days))
+            print(f"promote: {name} ({days} j) -> soldat ✅")
+        elif status == "already":
+            print(f"promote: {name} déjà soldat (skip).")
+        elif status == "expired":
+            expired = True
+            remaining = recruits[i:]  # ceux qu'on n'a pas pu traiter
+            print(f"promote: session portail expirée ({detail}) ; arrêt.")
+            break
+        else:
+            print(f"promote: échec {name} ({detail}).")
+
+    if expired:
+        lines = [f"• **{n}** — recrue depuis {d} jours" for _, n, d in remaining]
+        post_embed({
+            "title": "🔒 Session portail expirée — promotions en pause",
+            "description": (
+                "Le cookie d'authentification du portail a expiré. Recolle le secret "
+                "`WG_PORTAL_COOKIE` (voir README) pour réactiver l'automatisation.\n\n"
+                f"**À passer soldat à la main en attendant ({len(remaining)}) :**\n"
+                + "\n".join(lines)),
+            "color": 0xE74C3C,
+            "footer": {"text": "GR0UT • Promotion auto"},
+        }, PROMOTE_WEBHOOK_URL)
+        return
+
+    if promoted:
+        lines = [f"• **{n}** — recrue depuis {d} jours" for n, d in promoted]
+        post_embed({
+            "title": f"🎖️ Promotions : {len(promoted)} recrue(s) passée(s) soldat",
+            "description": "\n".join(lines),
+            "color": 0x2ECC71,
+            "footer": {"text": f"GR0UT • Promotion auto • ≥ {PROMOTE_AFTER_DAYS} j"},
+        }, PROMOTE_WEBHOOK_URL)
+    print(f"promote: {len(promoted)} promue(s).")
+
+
 # --- Entrée ------------------------------------------------------------------
 
 COMMANDS = {"inactivity": cmd_inactivity, "leaderboard": cmd_leaderboard,
-            "announce": cmd_announce}
+            "announce": cmd_announce, "promote": cmd_promote}
 
 
 def main():

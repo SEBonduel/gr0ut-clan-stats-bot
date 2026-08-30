@@ -1,0 +1,26 @@
+name: Promotion auto recrue -> soldat
+
+on:
+  schedule:
+    - cron: "0 7 * * *"   # tous les jours 07h UTC (09h Paris). Garde aussi la session chaude.
+  workflow_dispatch: {}
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Promote recruits
+        env:
+          WG_APP_ID: ${{ secrets.WG_APP_ID }}
+          PROMOTE_CLAN_ID: "500165786"        # GR0UT uniquement
+          PROMOTE_AFTER_DAYS: "30"
+          WG_PORTAL_COOKIE: ${{ secrets.WG_PORTAL_COOKIE }}
+          PROMOTE_WEBHOOK_URL: ${{ secrets.PROMOTE_WEBHOOK_URL }}
+          INACTIVITY_WEBHOOK_URL: ${{ secrets.INACTIVITY_WEBHOOK_URL }}
+          STATS_WEBHOOK_URL: ${{ secrets.STATS_WEBHOOK_URL }}
+        run: python main.py promote

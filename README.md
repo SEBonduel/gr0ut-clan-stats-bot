@@ -11,6 +11,32 @@ GitHub Actions :
 - 🏆 **Leaderboard du jour** — chaque soir, le **top 5** des joueurs des dernières
   ~24h, classé par **WN8 de session** (perf réelle par bataille, pas par volume).
   Chaque joueur affiche : WN8, tier moyen, dégâts moyens, spot moyen et % de victoires.
+- 🎖️ **Promotion auto** (GR0UT) — chaque jour, passe les **recrues → soldat** après
+  `PROMOTE_AFTER_DAYS` jours (défaut 30) et poste la liste des promus sur Discord.
+
+## Promotion auto recrue → soldat
+
+`main.py promote` détecte les recrues présentes depuis ≥ 30 jours (`wgn/clans/info`,
+champ `joined_at`) et les passe **soldat** via l'endpoint interne du portail clan
+(`api/change_role`), qui **exige une session d'officier authentifiée**.
+
+Comme l'API publique WG est en lecture seule pour les grades, on fournit la session
+via le secret **`WG_PORTAL_COOKIE`** (l'en-tête `Cookie` complet du portail) :
+
+1. Connecte-toi au portail clan (`eu.wargaming.net/clans/wot/500165786/players/`)
+   avec un **compte officier** ayant le droit de gérer les grades.
+2. Ouvre les **DevTools → Network**, recharge, clique une requête vers
+   `eu.wargaming.net`, section *Request Headers* → copie **toute** la valeur `Cookie`.
+3. Colle-la dans le secret GitHub `WG_PORTAL_COOKIE`.
+
+Le cron quotidien fait aussi un **keep-alive** (GET portail) pour garder la session
+vivante le plus longtemps possible. Quand elle finit par expirer, le bot **ne casse
+pas en silence** : il poste sur Discord un message d'alerte **avec la liste des
+recrues à passer soldat à la main**, jusqu'à ce que tu recolles le cookie.
+
+> Réglages : `PROMOTE_CLAN_ID` (défaut GR0UT `500165786`), `PROMOTE_AFTER_DAYS`
+> (défaut 30), `PROMOTE_WEBHOOK_URL` (sinon retombe sur le webhook d'inactivité).
+> `DRY_RUN=1` liste sans rien changer.
 
 ## Comment ça marche
 
