@@ -43,6 +43,9 @@ TOP_N = int(os.environ.get("TOP_N", "5"))  # taille du classement (podium)
 # signalé comme ne participant pas au jeu d'équipe (contribution ~nulle aux
 # ressources industrielles, qui ne se gagnent que dans ces modes).
 MIN_BASTION_BATTLES = int(os.environ.get("MIN_BASTION_BATTLES", "10"))
+# Classement positif « top contributeurs Bastion » (Escarmouches + Incursions).
+BASTION_TOP_DAYS = int(os.environ.get("BASTION_TOP_DAYS", "7"))  # 1, 7 ou 28
+BASTION_TOP_N = int(os.environ.get("BASTION_TOP_N", "10"))
 SNAPSHOT_FILE = os.environ.get("SNAPSHOT_FILE", "snapshot.json")
 WN8_EXP_FILE = os.environ.get("WN8_EXP_FILE", "wn8exp.json")  # valeurs attendues (XVM)
 DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
@@ -130,13 +133,14 @@ BASTION_DAYS = 28  # seule fenêtre proposée par le portail (1 / 7 / 28 j)
 BASTION_BATTLE_TYPES = ("sortie", "incursion")  # Escarmouches (Bastion) + Incursions
 
 
-def fetch_bastion_activity(clan_id):
-    """{account_id: nb batailles Bastion+Incursions sur 28 j} via le portail clan.
+def fetch_bastion_activity(clan_id, days=BASTION_DAYS):
+    """{account_id: nb batailles Bastion+Incursions sur `days` j} via le portail.
 
     Source : endpoint interne `/clans/wot/<id>/api/players/` (public, sans auth,
-    mais exige l'en-tête AJAX). Renvoie None si les stats du clan sont masquées
-    ou si l'endpoint est indisponible — la section est alors simplement omise.
+    mais exige l'en-tête AJAX). Le portail n'accepte que 1 / 7 / 28 j. Renvoie None
+    si les stats du clan sont masquées ou si l'endpoint est indisponible.
     """
+    timeframe = min((1, 7, 28), key=lambda w: abs(w - days))  # borne aux valeurs offertes
     totals = {}
     for bt in BASTION_BATTLE_TYPES:
         url = f"{PORTAL_BASE}/clans/wot/{clan_id}/api/players/"
@@ -144,7 +148,7 @@ def fetch_bastion_activity(clan_id):
             r = SESSION.get(
                 url,
                 params={"offset": 0, "limit": 500, "order": "-role",
-                        "timeframe": BASTION_DAYS, "battle_type": bt},
+                        "timeframe": timeframe, "battle_type": bt},
                 headers={"X-Requested-With": "XMLHttpRequest"}, timeout=30,
             )
             r.raise_for_status()
@@ -694,10 +698,50 @@ def cmd_promote():
     print(f"promote: {len(promoted)} promue(s).")
 
 
+# --- Commande : top contributeurs Bastion (classement positif) ---------------
+
+def report_bastion_top(clan_id, clan_name, webhook):
+    activity = fetch_bastion_activity(clan_id, BASTION_TOP_DAYS)
+    if activity is None:
+        print(f"bastion_top[{clan_name}]: activité indisponible (stats masquées ?).")
+        return
+    members = {m["account_id"]: m["name"] for m in fetch_members(clan_id)}
+    rows = sorted(
+        ((members.get(aid, aid), n) for aid, n in activity.items() if n > 0),
+        key=lambda x: -x[1],
+    )[:BASTION_TOP_N]
+
+    if not rows:
+        desc = "Personne n'a joué d'Escarmouche ni d'Incursion sur la période. 😴"
+    else:
+        lines = []
+        for i, (name, n) in enumerate(rows):
+            s = "s" if n != 1 else ""
+            lines.append(f"{rank_marker(i)} **{name}** — {n} bataille{s}")
+        desc = "\n".join(lines)
+
+    fen = {1: "24 h", 7: "7 jours", 28: "28 jours"}.get(
+        min((1, 7, 28), key=lambda w: abs(w - BASTION_TOP_DAYS)), f"{BASTION_TOP_DAYS} j")
+    post_embed({
+        "title": f"🏰 {clan_name} — Top contributeurs Bastion ({fen})",
+        "description": desc,
+        "color": 0x1ABC9C,
+        "footer": {"text": f"{clan_name} • Escarmouches + Incursions • merci à eux 💪"},
+    }, webhook)
+    print(f"bastion_top[{clan_name}]: {len(rows)} au classement.")
+
+
+def cmd_bastion_top():
+    for t in inactivity_targets():  # mêmes clans/webhooks que le radar d'inactivité
+        report_bastion_top(t["clan_id"], t.get("name", t["clan_id"]),
+                           t.get("webhook") or INACTIVITY_WEBHOOK_URL)
+
+
 # --- Entrée ------------------------------------------------------------------
 
 COMMANDS = {"inactivity": cmd_inactivity, "leaderboard": cmd_leaderboard,
-            "announce": cmd_announce, "promote": cmd_promote}
+            "announce": cmd_announce, "promote": cmd_promote,
+            "bastion_top": cmd_bastion_top}
 
 
 def main():

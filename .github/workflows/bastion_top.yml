@@ -1,0 +1,26 @@
+name: Top contributeurs Bastion
+
+on:
+  schedule:
+    - cron: "0 18 * * 0"   # dimanche 18h UTC (20h Paris été) : bilan de la semaine
+  workflow_dispatch: {}
+
+jobs:
+  bastion_top:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Post Bastion top contributors
+        env:
+          WG_APP_ID: ${{ secrets.WG_APP_ID }}
+          WG_CLAN_ID: ${{ secrets.WG_CLAN_ID }}
+          INACTIVITY_TARGETS: ${{ secrets.INACTIVITY_TARGETS }}
+          INACTIVITY_WEBHOOK_URL: ${{ secrets.INACTIVITY_WEBHOOK_URL }}
+          STATS_WEBHOOK_URL: ${{ secrets.STATS_WEBHOOK_URL }}
+          BASTION_TOP_DAYS: "7"
+          BASTION_TOP_N: "10"
+        run: python main.py bastion_top
