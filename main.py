@@ -46,6 +46,8 @@ MIN_BASTION_BATTLES = int(os.environ.get("MIN_BASTION_BATTLES", "10"))
 # Classement positif « top contributeurs Bastion » (Escarmouches + Incursions).
 BASTION_TOP_DAYS = int(os.environ.get("BASTION_TOP_DAYS", "7"))  # 1, 7 ou 28
 BASTION_TOP_N = int(os.environ.get("BASTION_TOP_N", "10"))
+# Jour où le Top Bastion est ajouté au leaderboard (lun=0 … dim=6). Défaut dimanche.
+BASTION_TOP_WEEKDAY = int(os.environ.get("BASTION_TOP_WEEKDAY", "6"))
 SNAPSHOT_FILE = os.environ.get("SNAPSHOT_FILE", "snapshot.json")
 WN8_EXP_FILE = os.environ.get("WN8_EXP_FILE", "wn8exp.json")  # valeurs attendues (XVM)
 DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
@@ -523,10 +525,17 @@ def report_leaderboard(clan_id, name, webhook, snapshot_all):
 
 def cmd_leaderboard():
     snapshot_all = load_snapshot_all()
-    for t in leaderboard_targets():
+    targets = leaderboard_targets()
+    for t in targets:
         report_leaderboard(t["clan_id"], t.get("name", t["clan_id"]),
                           t.get("webhook") or LEADERBOARD_WEBHOOK_URL, snapshot_all)
     save_snapshot(snapshot_all)
+
+    # Une fois par semaine, on ajoute le Top contributeurs Bastion au même salon.
+    if datetime.now(ZoneInfo("Europe/Paris")).weekday() == BASTION_TOP_WEEKDAY:
+        for t in targets:
+            report_bastion_top(t["clan_id"], t.get("name", t["clan_id"]),
+                               t.get("webhook") or LEADERBOARD_WEBHOOK_URL)
 
 
 # --- Commande : annonce (mise à jour du calcul des stats) ---------------------

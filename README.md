@@ -13,10 +13,11 @@ GitHub Actions :
   Chaque joueur affiche : WN8, tier moyen, dégâts moyens, spot moyen et % de victoires.
 - 🎖️ **Promotion auto** (GR0UT) — chaque jour, passe les **recrues → soldat** après
   `PROMOTE_AFTER_DAYS` jours (défaut 30) et poste la liste des promus sur Discord.
-- 🏰 **Top contributeurs Bastion** (`main.py bastion_top`) — classement positif
-  hebdo des joueurs qui font le plus d'**Escarmouches + Incursions** (fenêtre
-  `BASTION_TOP_DAYS`, défaut 7 j ; top `BASTION_TOP_N`, défaut 10). Réutilise la
-  même source que le radar d'inactivité et les mêmes clans (`INACTIVITY_TARGETS`).
+- 🏰 **Top contributeurs Bastion** — classement positif des joueurs qui font le
+  plus d'**Escarmouches + Incursions** (fenêtre `BASTION_TOP_DAYS`, défaut 7 j ;
+  top `BASTION_TOP_N`, défaut 10). Ajouté **au message du leaderboard une fois par
+  semaine** (`BASTION_TOP_WEEKDAY`, défaut dimanche = 6). Aussi lançable seul via
+  `main.py bastion_top`.
 
 ## Promotion auto recrue → soldat
 
