@@ -625,9 +625,13 @@ def portal_change_role(clan_id, account_id, role="private"):
         return ("expired", f"HTTP {r.status_code}")
     if r.status_code == 201:
         return ("ok", "201")
-    body = (r.text or "")[:200]
+    body = (r.text or "")[:300]
     if "role_already_assigned" in body:
         return ("already", "409")
+    # Le portail peut renvoyer HTTP 200 avec l'erreur d'auth DANS le corps
+    # (error_code 401 = "vous devez vous connecter") -> session morte.
+    if '"error_code": 401' in body or "error_code\": 401" in body or "войти" in body:
+        return ("expired", "401 dans le corps (non authentifié)")
     return ("error", f"HTTP {r.status_code} {body}")
 
 
@@ -661,6 +665,16 @@ def cmd_promote():
         }, PROMOTE_WEBHOOK_URL)
         print("promote: cookie manquant ; liste postée.")
         return
+
+    # Diagnostic sûr : on n'affiche QUE les noms de cookies et des longueurs,
+    # jamais les valeurs (sessionid est souvent tronqué au copier-coller).
+    _names = [p.strip().split("=", 1)[0] for p in WG_PORTAL_COOKIE.split(";") if p.strip()]
+    _nl = any(c in WG_PORTAL_COOKIE for c in "\r\n")
+    print(f"promote: cookie = {len(WG_PORTAL_COOKIE)} car., {len(_names)} clés ; "
+          f"sessionid={'oui' if 'sessionid' in _names else 'NON'} ; "
+          f"csrftoken={'oui' if 'csrftoken' in _names else 'NON'} ; "
+          f"retours_ligne={'OUI (problème)' if _nl else 'non'}")
+    print(f"promote: clés = {', '.join(_names)}")
 
     promoted, remaining, expired = [], [], False
     for i, (aid, name, days) in enumerate(recruits):
