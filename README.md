@@ -19,7 +19,20 @@ GitHub Actions :
   semaine** (`BASTION_TOP_WEEKDAY`, défaut dimanche = 6). Aussi lançable seul via
   `main.py bastion_top`.
 
-## Promotion auto recrue → soldat
+## Promotion recrue → soldat (semi-auto)
+
+> **Mode retenu : semi-auto.** La promotion 100 % automatique n'est pas possible :
+> le portail clan **invalide la session** dès qu'elle est utilisée depuis une autre
+> IP que celle qui l'a créée (protection anti-détournement). Un cookie posé dans
+> GitHub Actions est donc rejeté **et déconnecte le compte**. Le bot se contente
+> donc de **lister chaque jour sur Discord les recrues à passer soldat** ; la
+> promotion se fait en 2 clics sur le portail.
+>
+> Le code de promotion automatique reste présent : il fonctionnerait si le script
+> était lancé **depuis la machine ayant ouvert la session** (même IP), via
+> `WG_PORTAL_COOKIE`.
+
+## Détail technique (mode auto, non utilisé)
 
 `main.py promote` détecte les recrues présentes depuis ≥ 30 jours (`wgn/clans/info`,
 champ `joined_at`) et les passe **soldat** via l'endpoint interne du portail clan

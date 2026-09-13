@@ -668,16 +668,19 @@ def cmd_promote():
         print(f"promote: aucune recrue >= {PROMOTE_AFTER_DAYS} j.")
         return
     if not WG_PORTAL_COOKIE:
-        # Pas de session configurée : on prévient sur Discord au lieu d'échouer.
-        noms = ", ".join(n for _, n, _ in recruits)
+        # Mode semi-auto (le mode par défaut) : la promotion automatique n'est pas
+        # possible car Wargaming invalide la session dès qu'elle sert depuis une
+        # autre IP. On poste donc la liste à promouvoir à la main sur le portail.
+        lines = [f"• **{n}** — recrue depuis {d} jours" for _, n, d in recruits]
         post_embed({
-            "title": "⚠️ Promotions en attente (cookie portail manquant)",
-            "description": (f"{len(recruits)} recrue(s) à passer soldat : {noms}\n\n"
-                            "Configure le secret `WG_PORTAL_COOKIE` pour l'automatiser."),
-            "color": 0xE67E22,
-            "footer": {"text": "GR0UT • Promotion auto"},
+            "title": f"🎖️ {len(recruits)} recrue(s) à passer soldat (≥ {PROMOTE_AFTER_DAYS} j)",
+            "description": ("\n".join(lines) +
+                            "\n\n➡️ À faire sur le portail : *Personnel militaire* → "
+                            "cocher le joueur → **Modifier les grades** → **Soldat**."),
+            "color": 0xF1C40F,
+            "footer": {"text": "GR0UT • Rappel promotions"},
         }, PROMOTE_WEBHOOK_URL)
-        print("promote: cookie manquant ; liste postée.")
+        print(f"promote: semi-auto, {len(recruits)} recrue(s) listée(s) sur Discord.")
         return
 
     # Diagnostic sûr : on n'affiche QUE les noms de cookies et des longueurs,
