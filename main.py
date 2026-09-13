@@ -596,6 +596,19 @@ def fetch_recruits_since(clan_id, days):
     return out
 
 
+# La session du portail peut être liée au navigateur qui l'a créée : on imite
+# des en-têtes de vrai navigateur (le UA du bot se faisait rejeter en 401).
+PORTAL_BROWSER_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"),
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+}
+
+
 def portal_change_role(clan_id, account_id, role="private"):
     """Change le grade d'un membre via l'API interne du portail (session officier).
 
@@ -610,6 +623,7 @@ def portal_change_role(clan_id, account_id, role="private"):
         r = SESSION.post(
             url, data={"user_ids": account_id, "role": role},
             headers={
+                **PORTAL_BROWSER_HEADERS,
                 "X-Requested-With": "XMLHttpRequest",
                 "X-CSRFToken": csrf,
                 "Cookie": WG_PORTAL_COOKIE,
