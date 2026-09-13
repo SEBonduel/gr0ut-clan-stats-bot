@@ -2,7 +2,7 @@ name: Promotion auto recrue -> soldat
 
 on:
   schedule:
-    - cron: "0 7 * * *"   # tous les jours 07h UTC (09h Paris). Garde aussi la session chaude.
+    - cron: "0 8 * * 0"   # dimanche 08h UTC (10h Paris) : rappel hebdo, pas de spam quotidien.
   workflow_dispatch: {}
 
 jobs:
