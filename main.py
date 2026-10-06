@@ -167,10 +167,18 @@ def fetch_bastion_activity(clan_id, days=BASTION_DAYS):
 
 
 def fetch_tank_stats(account_id):
-    """Stats cumulées par char d'un compte : {tank_id: [battles, wins, dmg, frags, spot, def]}."""
+    """Stats cumulées par char d'un compte :
+    {tank_id: [battles, wins, dmg, frags, spot, def, radio, track, stun, survived]}.
+
+    Les 4 derniers champs (assistance spot/chenilles/étourdissement, batailles
+    survécues) sont archivés pour analyse ; la WN8 de session n'utilise que les 6
+    premiers. Les baselines plus anciennes n'ont que 6 champs.
+    """
     data = api_get("wot/tanks/stats", account_id=account_id,
                    fields=("tank_id,all.battles,all.wins,all.damage_dealt,"
-                           "all.frags,all.spotted,all.dropped_capture_points"))
+                           "all.frags,all.spotted,all.dropped_capture_points,"
+                           "all.radio_assisted_damage,all.track_assisted_damage,"
+                           "all.stun_assisted_damage,all.survived_battles"))
     tanks = data.get(str(account_id)) or []
     out = {}
     for t in tanks:
@@ -181,6 +189,8 @@ def fetch_tank_stats(account_id):
             a["battles"], a.get("wins", 0), a.get("damage_dealt", 0),
             a.get("frags", 0), a.get("spotted", 0),
             a.get("dropped_capture_points", 0),
+            a.get("radio_assisted_damage", 0), a.get("track_assisted_damage", 0),
+            a.get("stun_assisted_damage", 0), a.get("survived_battles", 0),
         ]
     return out
 

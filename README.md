@@ -70,7 +70,9 @@ recrues à passer soldat à la main**, jusqu'à ce que tu recolles le cookie.
   pour calculer la **WN8 de session** de chaque joueur. La WN8 utilise la table de
   valeurs attendues officielle embarquée dans `wn8exp.json` (source XVM) et le tier
   moyen via `wot/encyclopedia/vehicles`. Pour rester léger, seuls les joueurs ayant
-  joué depuis le dernier snapshot sont re-interrogés char par char.
+  joué depuis le dernier snapshot sont re-interrogés char par char. Le snapshot
+  archive aussi l'assistance (spot, chenilles, étourdissement) et les batailles
+  survécues de chaque char, pour analyser la forme récente (non utilisées par la WN8).
 - `main.py announce` : poste une **annonce ponctuelle** (« Mise à jour du calcul des
   stats par SEBonduel ») détaillant le passage au classement WN8. Déclenchable à la
   main via *Actions → Annonce mise à jour stats → Run workflow*.
