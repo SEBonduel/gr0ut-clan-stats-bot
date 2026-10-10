@@ -4,7 +4,7 @@ Deux automatisations Discord pour le clan GR0UT (World of Tanks EU), gratuites v
 GitHub Actions :
 
 - 📉 **Radar d'inactivité** — chaque lundi, liste les membres sans bataille depuis
-  plus de 28 jours (configurable). Une 2ᵉ section, séparée, signale les membres qui
+  plus de 14 jours (configurable). Une 2ᵉ section, séparée, signale les membres qui
   **jouent mais pas en équipe** : moins de `MIN_BASTION_BATTLES` batailles
   **Bastion (Escarmouches) + Incursions** sur 28 jours (≈ contribution nulle en
   ressources industrielles, qui ne se gagnent que dans ces modes).
@@ -102,8 +102,8 @@ recrues à passer soldat à la main**, jusqu'à ce que tu recolles le cookie.
 
 | Variable | Défaut | Rôle |
 |----------|--------|------|
-| `INACTIVITY_DAYS` | `28` | Seuil d'inactivité (jours) |
-| `MIN_BASTION_BATTLES` | `10` | Sous ce nb de batailles Bastion+Incursions sur 28 j → signalé « ne joue pas en équipe » |
+| `INACTIVITY_DAYS` | `14` | Seuil d'inactivité (jours) |
+| `MIN_BASTION_BATTLES` | `50` | Sous ce nb de batailles Bastion+Incursions sur 28 j → signalé « ne joue pas en équipe » |
 | `WG_PORTAL_BASE` | `https://eu.wargaming.net` | Base du portail clan (change de région au besoin) |
 | `MIN_BATTLES` | `5` | Minimum de batailles pour figurer au leaderboard |
 | `TOP_N` | `5` | Nombre de joueurs affichés au classement |

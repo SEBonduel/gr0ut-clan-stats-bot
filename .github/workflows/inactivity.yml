@@ -22,5 +22,6 @@ jobs:
           INACTIVITY_TARGETS: ${{ secrets.INACTIVITY_TARGETS }}
           INACTIVITY_WEBHOOK_URL: ${{ secrets.INACTIVITY_WEBHOOK_URL }}
           STATS_WEBHOOK_URL: ${{ secrets.STATS_WEBHOOK_URL }}
-          INACTIVITY_DAYS: "28"
+          INACTIVITY_DAYS: "14"
+          MIN_BASTION_BATTLES: "50"   # Bastion + Incursions sur 28 j (médiane ~390)
         run: python main.py inactivity

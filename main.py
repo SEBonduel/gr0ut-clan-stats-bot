@@ -35,14 +35,14 @@ API_BASE = os.environ.get("WG_API_BASE", "https://api.worldoftanks.eu")
 # Bastion/Incursions par membre. Publique (pas d'auth), mais spécifique région.
 PORTAL_BASE = os.environ.get("WG_PORTAL_BASE", "https://eu.wargaming.net").rstrip("/")
 
-INACTIVITY_DAYS = int(os.environ.get("INACTIVITY_DAYS", "28"))
+INACTIVITY_DAYS = int(os.environ.get("INACTIVITY_DAYS", "14"))
 MIN_BATTLES = int(os.environ.get("MIN_BATTLES", "5"))  # seuil pour le leaderboard
 TOP_N = int(os.environ.get("TOP_N", "5"))  # taille du classement (podium)
 # Radar d'inactivité, 2e section : jeu en équipe (Bastion + Incursions).
 # Sous ce nombre de batailles Bastion/Incursions sur 28 j, le membre est
 # signalé comme ne participant pas au jeu d'équipe (contribution ~nulle aux
 # ressources industrielles, qui ne se gagnent que dans ces modes).
-MIN_BASTION_BATTLES = int(os.environ.get("MIN_BASTION_BATTLES", "10"))
+MIN_BASTION_BATTLES = int(os.environ.get("MIN_BASTION_BATTLES", "50"))
 # Classement positif « top contributeurs Bastion » (Escarmouches + Incursions).
 BASTION_TOP_DAYS = int(os.environ.get("BASTION_TOP_DAYS", "7"))  # 1, 7 ou 28
 BASTION_TOP_N = int(os.environ.get("BASTION_TOP_N", "10"))
